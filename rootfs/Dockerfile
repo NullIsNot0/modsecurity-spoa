@@ -5,7 +5,7 @@ ARG HAPROXY_MODSEC_SHA256=645ff6fd6fe1394462bd6b82ee5430606c631b83021f8b5cd7eca2
 ARG MODSEC_VERSION=2.9.6
 ARG MODSEC_SHA256=626a831aca92cdff73ea68a85b7f5c105d9a15365fa270fbed3139a81eaf3344
 
-ADD spoa-log.patch /
+COPY . /
 
 RUN apk upgrade --no-cache \
  && apk add --no-cache --virtual .build-modsecurity \
@@ -33,6 +33,7 @@ RUN apk upgrade --no-cache \
     && unzip -d /usr/src /tmp/haproxy-modsecurity.zip \
     && mv /usr/src/spoa-modsecurity-${HAPROXY_MODSEC_REF} /usr/src/haproxy-modsecurity \
     && patch -p0 /usr/src/haproxy-modsecurity/spoa.c </spoa-log.patch \
+    && rm /spoa-log.patch \
     && rm /tmp/haproxy-modsecurity.zip \
     && cd /usr/src/modsecurity \
     && ./configure \
@@ -60,15 +61,19 @@ RUN apk upgrade --no-cache \
     && apk add --no-cache $deps tini \
     && apk del --no-cache .build-modsecurity
 
-ARG OWASP_MODSEC_VERSION=v3.3.2
-ARG OWASP_MODSEC_SHA256=56ddb33a5d0413f43157e1ea22415adf75d8b12219c43156861fd11708c8033e
+ARG OWASP_MODSEC_VERSION=v3.3.4
+ARG OWASP_MODSEC_SHA256=15a84aaa041aa532905a34546b613bd3aed122e3f9814fbb5c28e1655d02b74d
 
 RUN mkdir -p /etc/modsecurity/owasp-modsecurity-crs \
     && wget -qO/etc/modsecurity/modsecurity.conf https://github.com/SpiderLabs/ModSecurity/raw/v2/master/modsecurity.conf-recommended \
     && wget -qO/etc/modsecurity/unicode.mapping https://github.com/SpiderLabs/ModSecurity/raw/v2/master/unicode.mapping \
     && wget -qO/tmp/owasp.tar.gz https://github.com/coreruleset/coreruleset/archive/${OWASP_MODSEC_VERSION}.tar.gz \
     && echo "$OWASP_MODSEC_SHA256  /tmp/owasp.tar.gz" | sha256sum -c \
-    && tar xzf /tmp/owasp.tar.gz --strip-components=1 -C /etc/modsecurity/owasp-modsecurity-crs \
+    && mkdir -p /tmp/owasp-modsecurity-crs \
+    && tar xzf /tmp/owasp.tar.gz --strip-components=1 -C /tmp/owasp-modsecurity-crs \
+    && mv /tmp/owasp-modsecurity-crs/crs-setup.conf.example /etc/modsecurity/owasp-modsecurity-crs/crs-setup.conf.example \
+    && mv /tmp/owasp-modsecurity-crs/rules /etc/modsecurity/owasp-modsecurity-crs/rules \
+    && rm -rf /tmp/owasp-modsecurity-crs \
     && rm /tmp/owasp.tar.gz \
     && find \
             /etc/modsecurity/owasp-modsecurity-crs \
@@ -88,7 +93,5 @@ RUN mkdir -p /etc/modsecurity/owasp-modsecurity-crs \
             /etc/modsecurity/owasp-modsecurity-crs/rules \
             -type f -maxdepth 1 -name '*.conf' \
         | sort | sed 's/^/Include /' >> /etc/modsecurity/owasp-modsecurity-crs.conf
-
-COPY . /
 
 ENTRYPOINT ["tini", "--", "/start.sh"]

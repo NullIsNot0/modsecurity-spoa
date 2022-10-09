@@ -1,0 +1,38 @@
+stages:
+  - build
+#  - test
+#  - release
+#  - staging
+#  - production
+
+image: docker:latest
+
+variables:
+  # DOCKER_HOST: tcp://localhost:2375
+  # This will instruct Docker not to start over TLS.
+  DOCKER_TLS_CERTDIR: ""
+
+services:
+  - name: docker:20.10-dind
+    command:
+      - /bin/sh
+      - -c
+      - |
+        mkdir -p /etc/docker/certs.d/gitlab.energo.lv\:7600 || exit
+        echo "$CI_SERVER_TLS_CA_FILE" > /etc/docker/certs.d/gitlab.energo.lv:7600/ca.crt  || exit
+        dockerd-entrypoint.sh || exit
+
+before_script:
+  - echo "$CI_BUILD_TOKEN" | docker login --username $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+
+build:
+  stage: build
+  tags:
+    - standalone-runner
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:latest > /dev/null && echo "Latest image will be used for cache" || echo "Latest image does not exist"
+    - docker build --cache-from $CI_REGISTRY_IMAGE:latest --tag $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG --tag $CI_REGISTRY_IMAGE:latest rootfs
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+    - docker push $CI_REGISTRY_IMAGE:latest
+  only:
+    - tags
